@@ -20,42 +20,75 @@ library(data.tree)
 library(networkD3)
 ```
 
-```{r load_csv}
-# Load the district CSV
+```{r load_dist_csv}
+# Define the dist_csv_path
 dist_csv_path <- "input/districts.csv"
-dist_df <- read.csv(dist_csv_path, check.names = FALSE, sep = ";")  # Keep original column names with slashes
 
+# Load the CSV including the first row
+dist_df_raw <- read.csv(dist_csv_path, check.names = FALSE, sep = ";", header = FALSE, stringsAsFactors = FALSE)
+
+# First row is "Category" string and then region labels
+region_labels <- as.character(dist_df_raw[1, ])
+colnames(dist_df_raw) <- region_labels
+
+# Remove the first row (header info)
+dist_df <- dist_df_raw[-1, ]
+
+# Ensure "Category" column is properly named
+colnames(dist_df)[region_labels == "Categories"] <- "Categories"
+
+# Get unique region names (excluding "Categories")
+regions <- unique(region_labels)
+regions <- regions[regions != "Categories"]
+
+# Build named list: one data.frame per region
+region_dfs <- lapply(regions, function(region) {
+  cols <- which(region_labels == region | region_labels == "Categories")
+  df <- dist_df[, cols, drop = FALSE]
+
+  # Use first row as column names
+  new_colnames <- as.character(df[1, ])
+  colnames(df) <- new_colnames
+
+  # Remove the first row now used as header
+  df <- df[-1, , drop = FALSE]
+
+  # Optional: Reset row names
+  rownames(df) <- NULL
+
+  return(df)
+})
+
+names(region_dfs) <- regions
+
+# Add "Total" prefix to each category path in the pathString column
+# in each df in region_dfs.
+region_dfs <- lapply(region_dfs, function(df) {
+  df$pathString <- paste0("Total", df$pathString)
+  return(df)
+})
+```
+
+```{r load_region_csv}
 # Load the region CSV
 region_csv_path <- "input/regions.csv" #
 region_df <- read.csv(region_csv_path, check.names = FALSE, sep = ";")  # Keep original column names with slashes
 ```
 
 ```{r print_cat_tree}
-# Get column headers
-headers <- names(dist_df)
-
-# Remove non-category headers
-paths <- headers[!headers %in% c("Region", "District")]
-
-# Add "Total" prefix to each path
-paths <- paste0("Total", paths)
-
-# Clean paths: remove leading and trailing slashes
-cleaned_paths <- gsub("^/|/$", "", paths)
-
-# Create a data frame with one column "pathString"
-paths_df <- data.frame(pathString = cleaned_paths, stringsAsFactors = FALSE)
-
-# Convert to data.tree using as.Node()
-root <- as.Node(paths_df, pathDelimiter = "/")
+# Convert each region_dfs df to data.tree using as.Node()
+region_dfs <- lapply(region_dfs, function(df) {
+  root <- as.Node(df, pathDelimiter = "/")
+  return(root)
+})
 
 # Capture the output of the tree printing
-tree_output <- capture.output(print(root, "level", limit = NULL))
+tree_output <- capture.output(print(region_dfs[["Lwowskie"]], "level", limit = NULL))
 
 # Write it to a file
 writeLines(tree_output, "output/tree_structure.txt")
 
 #plot with networkD3
-catTreeList <- ToListExplicit(root, unname = TRUE)
+catTreeList <- ToListExplicit(region_dfs[["Lwowskie"]], unname = TRUE)
 radialNetwork(catTreeList)
 ```
