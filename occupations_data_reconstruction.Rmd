@@ -1,0 +1,61 @@
+---
+title: "1931-census-data"
+author: "Jan Kiljanski"
+date: "2025-07-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1931 Poland Census Occupations Data Reconstruction
+
+We load the occupations data from csvs. They come from 1931 census voivodeship-level publications published by Główny Urząd Statystyczny (Main Statistical Office) in years 1932-1938 and compiled into one file for districts and one file for regions.
+
+```{r packages}
+# Load necessary packages
+# install.packages("data.tree")  # Uncomment if not installed
+library(data.tree)
+library(networkD3)
+```
+
+```{r load_csv}
+# Load the district CSV
+dist_csv_path <- "input/districts.csv"
+dist_df <- read.csv(dist_csv_path, check.names = FALSE, sep = ";")  # Keep original column names with slashes
+
+# Load the region CSV
+region_csv_path <- "input/regions.csv" #
+region_df <- read.csv(region_csv_path, check.names = FALSE, sep = ";")  # Keep original column names with slashes
+```
+
+```{r print_cat_tree}
+# Get column headers
+headers <- names(dist_df)
+
+# Remove non-category headers
+paths <- headers[!headers %in% c("Region", "District")]
+
+# Add "Total" prefix to each path
+paths <- paste0("Total", paths)
+
+# Clean paths: remove leading and trailing slashes
+cleaned_paths <- gsub("^/|/$", "", paths)
+
+# Create a data frame with one column "pathString"
+paths_df <- data.frame(pathString = cleaned_paths, stringsAsFactors = FALSE)
+
+# Convert to data.tree using as.Node()
+root <- as.Node(paths_df, pathDelimiter = "/")
+
+# Capture the output of the tree printing
+tree_output <- capture.output(print(root, "level", limit = NULL))
+
+# Write it to a file
+writeLines(tree_output, "output/tree_structure.txt")
+
+#plot with networkD3
+catTreeList <- ToListExplicit(root, unname = TRUE)
+radialNetwork(catTreeList)
+```
