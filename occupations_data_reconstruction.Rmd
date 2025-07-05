@@ -39,7 +39,7 @@ colnames(dist_df)[region_labels == "Categories"] <- "Categories"
 
 # Get unique region names (excluding "Categories")
 regions <- unique(region_labels)
-regions <- regions[regions != "Categories"]
+regions <- regions[!regions %in% c("Categories", "Duże Miasta")]
 
 # Build named list: one data.frame per region
 region_dfs <- lapply(regions, function(region) {
@@ -61,6 +61,11 @@ region_dfs <- lapply(regions, function(region) {
 
 names(region_dfs) <- regions
 
+# Create a dict with dist names for each region
+region_dists <- lapply(region_dfs, function(df) {
+  setdiff(names(df), "pathString")
+})
+
 # Add "Total" prefix to each category path in the pathString column
 # in each df in region_dfs.
 region_dfs <- lapply(region_dfs, function(df) {
@@ -73,6 +78,7 @@ region_dfs <- lapply(region_dfs, function(df) {
 # Load the region CSV
 region_csv_path <- "input/regions.csv" #
 region_df <- read.csv(region_csv_path, check.names = FALSE, sep = ";")  # Keep original column names with slashes
+region_df$pathString <- paste0("Total", region_df$pathString)
 ```
 
 ```{r print_cat_tree}
@@ -81,6 +87,9 @@ region_dfs <- lapply(region_dfs, function(df) {
   root <- as.Node(df, pathDelimiter = "/")
   return(root)
 })
+
+# Convert region_df to data.tree
+region_df <- as.Node(region_df, pathDelimiter = "/")
 
 # Capture the output of the tree printing
 tree_output <- capture.output(print(region_dfs[["Lwowskie"]], "level", limit = NULL))
@@ -92,3 +101,89 @@ writeLines(tree_output, "output/tree_structure.txt")
 catTreeList <- ToListExplicit(region_dfs[["Lwowskie"]], unname = TRUE)
 radialNetwork(catTreeList)
 ```
+```{r}
+print(region_dfs[['Warszawskie']], "Błonie")
+```
+
+```{r prune_m_k}
+# Define the pruning function
+pruneFunMK <- function(node) {
+  !(node$isLeaf && node$name %in% c("m", "k"))
+}
+
+# Apply pruning to each data.tree in region_dfs
+region_dfs <- lapply(region_dfs, function(tree) {
+  Prune(tree, pruneFunMK)
+  return(tree)
+})
+
+# Apply pruning to region_df
+Prune(region_df, pruneFunMK)
+```
+
+
+```{r}
+print(region_dfs[['Warszawskie']], "Błonie")
+```
+
+```{r prune_I_to_VIII}
+# Define the pruning function
+pruneFunIToVIII <- function(node) {
+  !(node$isLeaf && node$name %in% c("I-V", "VI-VII", "VIII", "cat_not_defined", "I-III", "IV-V"))
+}
+
+# Apply pruning to each data.tree in region_dfs
+region_dfs <- lapply(region_dfs, function(tree) {
+  Prune(tree, pruneFunIToVIII)
+  return(tree)
+})
+
+# Apply pruning to region_df
+Prune(region_df, pruneFunIToVIII)
+```
+
+```{r}
+print(region_dfs[['Warszawskie']], "Błonie")
+```
+```{r}
+print(region_df, "Warszawskie")
+```
+
+Now, add the attribute "RegionTotal" to each region's tree in the region_dfs dict.
+
+```{r add_region_totals_to_dist_trees}
+# Convert region_df tree to a data frame
+region_df_df <- do.call(ToDataFrameTree, c(list(region_df), as.list(c("pathString", regions))))
+
+# Now each data.tree in region_dfs will be converted to a data.frame,
+# we'll match on pathString to add the RegionTotal column, and convert back to data.tree
+
+region_dfs <- lapply(names(region_dfs), function(region_name) {
+  
+  # Convert tree to data.frame
+  region_tree_df <- do.call(ToDataFrameTree, c(list(region_dfs[[region_name]]), as.list(c("pathString",region_dists[[region_name]]))))
+
+  # Merge on pathString: bring region values from region_df_df
+  merged_df <- merge(region_tree_df, region_df_df[, c("pathString", region_name)], by = "pathString", all.x = TRUE)
+  
+  # Rename the column to "RegionTotal"
+  names(merged_df)[names(merged_df) == region_name] <- "RegionTotal"
+  
+  # Convert back to data.tree
+  as.Node(merged_df, pathDelimiter = "/")
+})
+
+names(region_dfs)<-regions
+```
+
+```{r}
+print(region_dfs[['Warszawskie']], "RegionTotal")
+```
+
+
+
+
+
+
+
+
