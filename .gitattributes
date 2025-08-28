@@ -1,2 +1,4 @@
-# Treat R Markdown files as R for language stats
+# Treat R Markdown files as R and omit html and ipynb for language stats
 *.Rmd linguist-language=R
+*.html linguist-detectable=false
+*.ipynb linguist-detectable=false
